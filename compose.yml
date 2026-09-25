@@ -1,0 +1,72 @@
+name: testapp
+
+services:
+  db:
+    image: postgres:18
+    container_name: testapp-db
+    environment:
+      POSTGRES_DB: testdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_HOST_AUTH_METHOD: trust
+    ports:
+      - "15432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./db/init.sql:/docker-entrypoint-initdb.d/001-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d testdb"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  app:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: testapp-app
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./app:/src
+      - /src/bin
+      - /src/obj
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ConnectionStrings__Db: "Host=db;Port=5432;Database=testdb;Username=postgres;Password=postgres"
+      ASPNETCORE_URLS: "http://+:8090"
+      ASPNETCORE_ENVIRONMENT: "Production"
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: testapp-pgadmin
+    ports:
+      - "8080:80"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+      PGADMIN_CONFIG_WTF_CSRF_ENABLED: "False"
+      PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: "False"
+      PGADMIN_DISABLE_POSTFIX: "true"
+    volumes:
+      - ./pgadmin/servers.json:/pgadmin4/servers.json:ro
+      - pgadmin-data:/var/lib/pgadmin
+    depends_on:
+      db:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c '
+      /entrypoint.sh &
+      EP=$$!;
+      for i in $$(seq 1 120); do [ -f /var/lib/pgadmin/pgadmin4.db ] && break; sleep 1; done;
+      sleep 2;
+      cd /pgadmin4 && python3 /pgadmin4/setup.py --load-servers /pgadmin4/servers.json --replace || python3 /pgadmin4/setup.py --load-servers /pgadmin4/servers.json || true;
+      wait $$EP;'
+
+volumes:
+  pgdata:
+  pgadmin-data:
