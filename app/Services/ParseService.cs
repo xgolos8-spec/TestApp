@@ -20,7 +20,8 @@ public interface IParseService
 /// </summary>
 public sealed partial class ParseService(
     IValidator<ParseRequest> validator,
-    IConfiguration configuration) : IParseService
+    IConfiguration configuration,
+    ILogger<ParseService> logger) : IParseService
 {
     private static readonly HtmlParser HtmlParser = new();
 
@@ -80,8 +81,6 @@ public sealed partial class ParseService(
                 .Select(e => e.GetAttribute(attribute) ?? string.Empty)
                 .ToList();
 
-            await SaveElementsAsync(elements, attribute, cancellationToken);
-
             var emails = EmailRegex().Matches(page)
                 .Select(match => match.Value)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -97,6 +96,8 @@ public sealed partial class ParseService(
                 return ParseResponse.Fail(ErrorCodes.AesDecryptError, ex.Message);
             }
 
+            await SaveElementsAsync(elements, attribute, cancellationToken);
+
             return new ParseResponse
             {
                 Url = url,
@@ -107,9 +108,14 @@ public sealed partial class ParseService(
                 DecryptedPlainText = plainText
             };
         }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
         catch (Exception ex)
         {
-            return ParseResponse.Fail(ErrorCodes.InternalError, ex.Message);
+            logger.LogError(ex, "Unexpected error while processing parse request.");
+            return ParseResponse.Fail(ErrorCodes.InternalError, "An unexpected error occurred.");
         }
     }
 
@@ -148,9 +154,9 @@ public sealed partial class ParseService(
 
     private static string DecryptAes256Ecb(byte[] cipherBytes, byte[] keyBytes)
     {
-        if (keyBytes.Length is not (16 or 24 or 32))
+        if (keyBytes.Length != 32)
         {
-            throw new CryptographicException($"AES key must be 16, 24 or 32 bytes, got {keyBytes.Length}.");
+            throw new CryptographicException($"AES-256 key must be exactly 32 bytes, got {keyBytes.Length}.");
         }
 
         if (cipherBytes.Length == 0 || cipherBytes.Length % 16 != 0)

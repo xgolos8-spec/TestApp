@@ -34,7 +34,7 @@ builder.Services
                 .Where(m => !string.IsNullOrWhiteSpace(m)));
 
             return new OkObjectResult(ParseResponse.Fail(
-                "INVALID_REQUEST",
+                ErrorCodes.InvalidRequest,
                 string.IsNullOrWhiteSpace(message) ? "Invalid request body." : message!));
         };
     });

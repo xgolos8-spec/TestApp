@@ -40,4 +40,26 @@ HTTP-запрос держит поток из пула Kestrel, пока мет
 
 ## Структура
 
-Минимальный набор по условию задания: контроллер, сервис, модели, плюс инфраструктура docker/pgadmin.
+Основные границы приложения:
+
+- `Controllers` принимает HTTP-запрос и делегирует сценарий сервису.
+- `Services` выполняет валидацию, декодирование, HTML-парсинг, криптографию и запись результата.
+- `Models/ParseRequest.cs` и `Models/ParseResponse.cs` содержат контракт API.
+- `Models/ParseRequestValidator.cs` содержит правила входных данных.
+- `Models/ErrorCodes.cs` содержит стабильные коды ошибок контракта.
+
+Сервис сначала выполняет все проверки и расшифровку, а затем сохраняет найденные элементы. Поэтому невалидный шифротекст не оставляет частично обработанные данные в PostgreSQL.
+
+## Предлагаемая история коммитов
+
+Для чистой демонстрационной истории изменения можно оформить отдельными атомарными коммитами:
+
+1. `chore: add docker and PostgreSQL infrastructure`
+2. `feat: add HTML parsing and email extraction`
+3. `feat: add AES-256 decryption and API response contract`
+4. `feat: persist parsed elements in PostgreSQL`
+5. `refactor: split API models and validation rules`
+6. `fix: avoid persistence after decryption failure`
+7. `docs: describe architecture and local run commands`
+
+Текущий репозиторий уже содержит историю, поэтому эти сообщения являются планом для новой ветки или интерактивного rebase, а не призывом переписывать опубликованный `main`.
